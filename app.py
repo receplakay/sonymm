@@ -56,7 +56,7 @@ details.citation-popup .popup-content {
     background-color: #ffffff;
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
-    font-family: Consolas, monospace; /* Mevzuat metnini daha "kanuni" bir stille yazdırır */
+    font-family: Consolas, monospace;
 }
 
 /* Bilgi Kartı (Flashcard) Tasarımı */
@@ -107,6 +107,21 @@ def extract_pdf_text(filepath):
 with st.sidebar:
     st.title("⚖️ Ayarlar ve API")
     api_key = st.text_input("Gemini API Anahtarı", type="password", help="Google AI Studio'dan alabileceğiniz ücretsiz API anahtarı.")
+    
+    selected_model_name = st.selectbox(
+        "🧠 Model Seçimi (Kota Dostu):",
+        options=["Gemini 1.5 Flash (Hızlı & Ücretsiz Dostu)", "Gemini 1.5 Pro (Zeki ama Kota Yiyebilir)"],
+        index=0,
+        help="Flash modeli daha hızlıdır ve ücretsiz kota ile daha çok işlem yapmanıza izin verir. Pro modeli daha karmaşık sorular için daha iyidir."
+    )
+    
+    # Model ismini API formatına çevir
+    model_id_map = {
+        "Gemini 1.5 Flash (Hızlı & Ücretsiz Dostu)": "gemini-1.5-flash",
+        "Gemini 1.5 Pro (Zeki ama Kota Yiyebilir)": "gemini-1.5-pro"
+    }
+    target_model_id = model_id_map[selected_model_name]
+
     if api_key:
         genai.configure(api_key=api_key)
         st.success("API Anahtarı aktif!")
@@ -135,7 +150,7 @@ with st.sidebar:
     }
 
     raw_files = []
-    processed_filenames = set() # Aynı dosyanın 2 kere eklenmesini engeller
+    processed_filenames = set()
     
     def scan_directory_for_pdfs(folder_path):
         if not os.path.exists(folder_path) or not os.path.isdir(folder_path):
@@ -153,12 +168,10 @@ with st.sidebar:
                 else:
                     raw_files.append((9999, 9, "99", f, fpath))
 
-    # Tüm olası lokasyonları tara (Github yükleme hatalarına tolerans)
     scan_directory_for_pdfs(tesmer_dir)
     scan_directory_for_pdfs(gib_dir)
-    scan_directory_for_pdfs(base_dir) # PDF'ler kazara ana klasöre atıldıysa buradan yakalar
+    scan_directory_for_pdfs(base_dir)
 
-    # Yıla, sonra döneme, sonra ders koduna göre eskiden yeniye kusursuz sıralama
     raw_files.sort(key=lambda x: (x[0], x[1], x[2]))
 
     all_files = {}
@@ -198,14 +211,11 @@ for idx, message in enumerate(st.session_state.messages):
             quiz_data = message["content"]
             quiz_id = f"quiz_{idx}"
             
-            # Formun tamamlanma durumunu kontrol et
             if f"submitted_{quiz_id}" not in st.session_state:
                 st.session_state[f"submitted_{quiz_id}"] = False
 
             with st.form(key=f"form_{quiz_id}", border=True):
                 st.subheader("📝 YMM Deneme Testi")
-                
-                # Soruları çiz
                 for q_idx, q in enumerate(quiz_data.get("questions", [])):
                     st.markdown(f"**Soru {q_idx + 1}:** {q['question']}")
                     st.radio(
@@ -217,20 +227,17 @@ for idx, message in enumerate(st.session_state.messages):
                     )
                     st.divider()
                 
-                # Testi Tamamla Butonu
                 submit_label = "Testi Tamamla (Sonuçları Gör)" if not st.session_state[f"submitted_{quiz_id}"] else "Test Tamamlandı ✅"
                 submitted = st.form_submit_button(submit_label, disabled=st.session_state[f"submitted_{quiz_id}"], type="primary")
                 
                 if submitted:
                     st.session_state[f"submitted_{quiz_id}"] = True
-                    st.rerun() # Şıkları kilitle ve sonuç ekspander'ını aç
+                    st.rerun()
                     
-            # Eğer test teslim edildiyse doğru/yanlış analizini göster
             if st.session_state[f"submitted_{quiz_id}"]:
                 with st.expander("📊 TIKLA: TEST SONUÇLARI VE AÇIKLAMALAR", expanded=True):
                     for q_idx, q in enumerate(quiz_data.get("questions", [])):
                         correct_idx = q["correct_index"]
-                        # Güvenlik önlemi, dizi dışına çıkmamak için
                         if correct_idx < len(q["options"]):
                             correct_option = q["options"][correct_idx]
                         else:
@@ -259,122 +266,81 @@ if c2.button("🃏 Bilgi Kartı (Flashcard)", use_container_width=True):
 if c3.button("📚 Kapsamlı YMM Sınav Özeti", use_container_width=True):
     special_action = "Ozet"
 
-prompt = st.chat_input("Veya kendi vergi sorunuzu yazın...")
+prompt = st.chat_input("Vergi sorunuzu yazın...")
 
 if special_action:
     if special_action == "Test":
-        prompt = """[Yapay Zeka Talimatı: Sisteme Eklediğim Bilgi Bankası dokümanlarını analiz et ve içindeki konulardaki en kilit, sınava yönelik detaylardan oluşan YMM seviyesi YEPYENİ ve ÇOK ZOR bir 5 soruluk çoktan seçmeli deneme testi üret. 
+        prompt = """[Yapay Zeka Talimatı: Sisteme Eklediğim Bilgi Bankası dokümanlarını analiz et ve içindeki konulardaki en kilit, sınava yönelik detaylardan oluşan YMM seviyesi 5 soruluk deneme testi üret. 
 
-KATI KURAL: Çıktıyı KESİNLİKLE JSON formatında ver. Sadece aşağıdaki JSON mimarisini dondur, başında veya sonunda "İşte testin" gibi hiçbir ekstra metin, selamlaşma, veya markdown ('```json') ibaresi BULUNMASIN, SADECE süslü parantez ile başlayan ham JSON gönder! 
-
+JSON FORMAT KURALI: 
 {
   "questions": [
     {
-      "question": "Soru metni...",
-      "options": ["A) Şık 1", "B) Şık 2", "C) Şık 3", "D) Şık 4", "E) Şık 5"],
-      "correct_index": 2,
-      "explanation": "Öğrenci bu soruyu yanlış yaparsa ona göstereceğimiz detaylı konuyu açıklayıcı eğitim yazısı/gerekçesi."
+      "question": "Soru...",
+      "options": ["A", "B", "C", "D", "E"],
+      "correct_index": 0,
+      "explanation": "..."
     }
   ]
-}
-]"""
+}]"""
     elif special_action == "Flashcard":
-        prompt = "[Yapay Zeka Talimatı: Seçtiğim dokümanlardaki vergi kurallarından 5 adet Bilgi Kartı (Flashcard) oluştur. HTML kodlarını kullanarak  <div class='flashcard'><div class='flashcard-q'>📌 Soru: ...</div><div class='flashcard-a'>Cevap: ...</div></div> şeklinde arayüzde görselleştir.]"
+        prompt = "[Seçili dokümanlardan 5 adet görsel Bilgi Kartı oluştur.]"
     elif special_action == "Ozet":
-        prompt = "[Yapay Zeka Talimatı: Seçtiğim dokümanlardaki vergi mevzuatını ve çözümleri YMM Sınavı (Kurumlar veya Revizyon) bakış açısıyla özetle. Adayların düşebileceği sınav tuzaklarını madde madde yaz.]"
-
+        prompt = "[Seçili dokümanlardaki sınav tuzaklarını ve revizyon noktalarını özetle.]"
 
 if prompt:
-    display_text = prompt
-    if special_action == "Test": display_text = "*📝 5 Soruluk interaktif deneme testi oluşturulması istendi...*"
-    elif special_action == "Flashcard": display_text = "*🃏 Bilgi kartları (Flashcard) derlenmesi istendi...*"
-    elif special_action == "Ozet": display_text = "*📚 Aday tuzakları ve detaylı özet oluşturulması istendi...*"
-        
-    st.session_state.messages.append({"role": "user", "type": "text", "content": display_text})
+    st.session_state.messages.append({"role": "user", "type": "text", "content": prompt})
     with st.chat_message("user"):
-        st.markdown(display_text)
+        st.markdown(prompt)
 
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         
         if not api_key:
-            error_msg = "⚠️ **Hata:** Lütfen sol menüye Gemini API Anahtarınızı giriniz!"
-            message_placeholder.markdown(error_msg, unsafe_allow_html=True)
-            st.session_state.messages.append({"role": "assistant", "type": "text", "content": error_msg})
+            message_placeholder.error("⚠️ Lütfen API anahtarı giriniz.")
         else:
             try:
                 context_text = ""
                 if selected_files:
-                    with st.spinner("📚 Seçili RAG belgeleriniz okunuyor..."):
+                    with st.spinner("Okunuyor..."):
                         for fname in selected_files:
-                            fpath = all_files[fname]
-                            file_content = extract_pdf_text(fpath)
-                            context_text += f"\n\n--- DÖKÜMAN: {fname} ---\n{file_content}\n----------------------------\n"
+                            context_text += f"\n\n--- DÖKÜMAN: {fname} ---\n{extract_pdf_text(all_files[fname])}\n"
 
-                available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                best_model = None
-                for pref in ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro", "models/gemini-1.0-pro"]:
-                    if pref in available:
-                        best_model = pref.replace("models/", "")
-                        break
-                if not best_model:
-                    best_model = available[0].replace("models/", "") if available else "gemini-pro"
-                
-                model = genai.GenerativeModel(best_model)
-                
-                # Accordion KATI KURAL güncellenmesi
-                system_prompt = """Sen kıdemli bir YMM ve Vergi Başmüfettişi yardımcısısın. 
-Sana sorulan soruları cevaplarken, eğer varsa aşağıdaki BİLGİ BANKASI dokümanlarını referans al.
-Cevaplarında Kanunlara atıf yaparken tıklandığında açılıp okunan bir Accordion kullan.
+                # Kullanıcının seçtiği modeli kullan (Eğer desteklenmiyorsa fallback yap)
+                try:
+                    available_names = [m.name for m in genai.list_models()]
+                    if f"models/{target_model_id}" not in available_names:
+                        # Fallback: Eğer seçilen model yoksa listedeki ilk uyumlu modeli bul
+                        available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                        target_model_id = available[0].replace("models/", "") if available else "gemini-1.5-flash"
+                except:
+                    pass
 
-DİKKAT KATI VE İHLAL EDİLEMEZ KURAL: 
-Mevzuata atıf yaptığında, popup-content içerisine kendi cümlelerinle bir asistan özeti ÇIKARMA, kendi yorumunu EKLEME! İlgili yasa veya tebliğ maddesini mevzuatta nasıl yazıyorsa birebir kopyalayarak asıl haliyle yapıştıracaksın. Özet yapman kesinlikle yasaktır!
-
-Örnek Şablon:
-<details class='citation-popup'>
-  <summary>🔍 İlgili Madde Metni: KVK Madde 11</summary>
-  <div class='popup-content'>
-    [BURAYA KANUN/TEBLİĞİN O MADDESİNİN KELİMESİ KELİMESİNE BİREBİR AYNISINI KOY, YORUM KATMA]
-  </div>
-</details>
-
-BİLGİ BANKASI (Pdf Dosyaları):"""
+                model = genai.GenerativeModel(target_model_id)
                 
-                final_prompt = f"{system_prompt}\n{context_text}\n\nKullanıcının veya Sistemin Otonom Sorusu: {prompt}"
+                system_prompt = """Sen YMM yardımcı asistanısın. Mevzuatı birebir al, özetleme. Accordion kullan."""
+                final_prompt = f"{system_prompt}\n{context_text}\n\nSoru: {prompt}"
                 
-                # JSON veya Text konfigürasyonu
-                # Eğer test isteniyorsa LLM'i JSON formatına zorlayıp output'u temizleyelim
                 model_kwargs = {}
                 if special_action == "Test":
                     model_kwargs["generation_config"] = {"response_mime_type": "application/json"}
                     
-                with st.spinner("🤖 Ajan içerikleri analiz ediyor..."):
+                with st.spinner(f"🤖 {selected_model_name} analiz ediyor..."):
                     response = model.generate_content(final_prompt, **model_kwargs)
                     full_response = response.text
                 
-                # Çıktı işleme (Test ise JSON parse et, metin ise normal render)
                 if special_action == "Test":
                     try:
-                        # API bazen ```json blokları verebiliyor, temizleyelim
                         cleaned_resp = full_response.strip()
-                        if cleaned_resp.startswith("```json"):
-                            cleaned_resp = cleaned_resp[7:-3]
-                        elif cleaned_resp.startswith("```"):
-                            cleaned_resp = cleaned_resp[3:-3]
-                            
+                        if "```json" in cleaned_resp: cleaned_resp = cleaned_resp.split("```json")[1].split("```")[0]
                         quiz_data = json.loads(cleaned_resp)
                         st.session_state.messages.append({"role": "assistant", "type": "quiz", "content": quiz_data})
-                        st.rerun() # Sayfayı test arayüzünün gelmesi için yenile
-                        
-                    except Exception as e:
-                        error_msg = f"YapayZeka test formatını oluşturamadı. Teknik detay: {e}"
-                        message_placeholder.error(error_msg)
-                        st.session_state.messages.append({"role": "assistant", "type": "text", "content": error_msg})
+                        st.rerun()
+                    except:
+                        st.error("Test formatı oluşturulamadı.")
                 else:
                     message_placeholder.markdown(full_response, unsafe_allow_html=True)
                     st.session_state.messages.append({"role": "assistant", "type": "text", "content": full_response})
                 
             except Exception as e:
-                error_msg = f"Ajan servise bağlanırken bir hata oluştu: {e}"
-                message_placeholder.error(error_msg)
-                st.session_state.messages.append({"role": "assistant", "type": "text", "content": error_msg})
+                message_placeholder.error(f"Hata: {e}")
