@@ -17,8 +17,6 @@ st.set_page_config(page_title="Mevzuat & YMM AI", page_icon="⚖️", layout="wi
 # --- SESSION STATE INITIALIZATION ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "footnotes" not in st.session_state:
-    st.session_state.footnotes = {}
 if "total_tokens" not in st.session_state:
     st.session_state.total_tokens = 0
 if "total_cost" not in st.session_state:
@@ -60,11 +58,6 @@ st.markdown("""
     letter-spacing: 1px;
 }
 
-/* Footnote UI (Footer) */
-.footnote-container { background-color: #f8fafc; border-top: 2px solid #334155; padding: 20px; margin-top: 50px; border-radius: 8px; }
-.footnote-item { font-size: 0.9em; color: #1e293b; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
-.footnote-title { font-weight: 700; color: #0f172a; }
-
 /* Meta Info */
 .meta-info { font-size: 0.75em; color: #94a3b8; text-align: right; margin-top: -10px; margin-bottom: 15px; font-style: italic; }
 
@@ -98,22 +91,11 @@ def update_cost(model_id, in_tokens, out_tokens):
     st.session_state.total_cost += cost
     return cost
 
-def parse_footnotes(text):
-    pattern = r"\[FOOTNOTE:\s*(.*?)\s*\|\s*(.*?)\s*\]"
-    found = re.findall(pattern, text, re.DOTALL)
-    clean_text = re.sub(pattern, "", text, flags=re.DOTALL)
-    for title, content in found:
-        exists = any(f["content"] == content for f in st.session_state.footnotes.values())
-        if not exists:
-            new_id = len(st.session_state.footnotes) + 1
-            st.session_state.footnotes[new_id] = {"title": title, "content": content}
-    return clean_text
-
 # --- SIDEBAR ---
 with st.sidebar:
     st.title("⚖️ Kontrol Paneli")
     
-    # Canlı Maliyet Göstergesi (Özelleştirilmiş HTML Kartı)
+    # Canlı Maliyet Göstergesi
     st.markdown(f"""
     <div class="cost-card">
         <span class="cost-label">Oturum Harcaması</span>
@@ -137,6 +119,7 @@ with st.sidebar:
 
     st.divider()
     st.title("📚 Knowledge")
+    
     DERS_KODLARI = {
         "01": "İleri Düzey Finansal Muhasebe",
         "02": "Finansal Yönetim",
@@ -188,7 +171,7 @@ with st.sidebar:
     selected_files = st.multiselect("Dökümanlar:", options=list(all_files.keys()))
 
     if st.button("🗑️ Sohbeti Temizle"):
-        st.session_state.messages = []; st.session_state.footnotes = {}
+        st.session_state.messages = []
         st.rerun()
 
 # --- MAIN UI ---
@@ -258,7 +241,13 @@ if prompt:
                     pass
 
                 model = genai.GenerativeModel(target_model_id)
-                system_prompt = f"Sen YMM'sin. Kanun metni için: [FOOTNOTE: Madde Adı | Tam Metin] formatını kullan. Sorularda [1],[2] atıf yap.\nKaynaklar:\n{context_txt}"
+                system_prompt = f"""Sen YMM'sın. Sorulacak soruları yanıtlarken şu KATI kurala uy:
+1. Metin içinde kanun veya tebliğe atıf yaptığında ASLA cümlenin içine kanun metni açıklamasını, özetini veya [FOOTNOTE] gibi ifadeler sıkıştırma. SADECE [1], [2] şeklinde referans numarası ver ve cümlene devam et (Örn: GVK Madde 11'e göre [1]...).
+2. Cevabını tamamen bitirdikten sonra, EN ALTA '---' işaretiyle yatay bir çizgi çek ve "📚 İlgili Mevzuat Maddeleri" başlığı at.
+3. Metin içinde verdiğin [1], [2] nolu referansların karşılığı olan mevzuat bölümlerinin KANUNDAKİ BİREBİR TAM METİNLERİNİ bu başlığın altına listele. Asla özet veya yorum katma.
+
+Kaynaklar:
+{context_txt}"""
                 
                 # Token Sayımı (Input)
                 try:
@@ -275,7 +264,7 @@ if prompt:
                 
                 raw_resp = response.text
                 query_cost = update_cost(target_model_id, in_tokens, out_tokens)
-                meta_str = f"Maliyet: ${query_cost:.5f} | Toplam: {in_tokens+out_tokens} token"
+                meta_str = f"Maliyet: ${query_cost:.5f} | Toplam: {in_tokens+out_tokens} token | Model: {target_model_id}"
                 
                 if special_action == "Test":
                     try:
@@ -285,22 +274,12 @@ if prompt:
                         st.session_state.messages.append({"role": "assistant", "type": "quiz", "content": quiz_data, "meta": meta_str})
                     except: st.error("Hatalı JSON formatı.")
                 else:
-                    clean_resp = parse_footnotes(raw_resp)
-                    st.markdown(clean_resp, unsafe_allow_html=True)
+                    st.markdown(raw_resp, unsafe_allow_html=True)
                     st.markdown(f"<div class='meta-info'>{meta_str}</div>", unsafe_allow_html=True)
-                    st.session_state.messages.append({"role": "assistant", "content": clean_resp, "type": "text", "meta": meta_str})
+                    st.session_state.messages.append({"role": "assistant", "content": raw_resp, "type": "text", "meta": meta_str})
                 
                 st.rerun()
             except Exception as e: st.error(f"İşlem Hatası: {e}")
-
-# --- FOOTER ---
-if st.session_state.footnotes:
-    st.markdown("---")
-    st.markdown("### 📚 Mevzuat Dipnotları")
-    st.markdown("<div class='footnote-container'>", unsafe_allow_html=True)
-    for fid, fdoc in st.session_state.footnotes.items():
-        st.markdown(f"<div class='footnote-item'><span class='footnote-title'>[{fid}] {fdoc['title']}:</span><br>{fdoc['content']}</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # Export
 st.write(""); st.divider()
@@ -309,6 +288,7 @@ with ec1:
     if st.button("🖨️ Sayfayı PDF Olarak Kaydet"): components.html("<script>parent.window.print();</script>", height=0)
 with ec2:
     txt_out = ""
-    for m in st.session_state.messages: txt_out += f"{m['role'].upper()}: {m['content']}\n\n"
-    for fid, fdoc in st.session_state.footnotes.items(): txt_out += f"[{fid}] {fdoc['title']}: {fdoc['content']}\n"
+    for m in st.session_state.messages: 
+        if m["type"] == "text":
+            txt_out += f"{m['role'].upper()}: {m['content']}\n\n"
     st.download_button("💾 TXT İndir", txt_out, "rapor.txt")
