@@ -135,23 +135,28 @@ with st.sidebar:
     }
 
     raw_files = []
+    processed_filenames = set() # Aynı dosyanın 2 kere eklenmesini engeller
     
-    if os.path.exists(tesmer_dir):
-        for f in os.listdir(tesmer_dir):
-            if f.endswith('.pdf'):
+    def scan_directory_for_pdfs(folder_path):
+        if not os.path.exists(folder_path) or not os.path.isdir(folder_path):
+            return
+        for f in os.listdir(folder_path):
+            if f.endswith('.pdf') and f not in processed_filenames:
+                processed_filenames.add(f)
+                fpath = os.path.join(folder_path, f)
                 match = re.search(r'ymm_(\d{4})_(\d)_(\d{2})', f)
                 if match:
                     yil = int(match.group(1))
                     donem = int(match.group(2))
                     ders = match.group(3)
-                    raw_files.append((yil, donem, ders, f, os.path.join(tesmer_dir, f)))
+                    raw_files.append((yil, donem, ders, f, fpath))
                 else:
-                    raw_files.append((9999, 9, "99", f, os.path.join(tesmer_dir, f)))
+                    raw_files.append((9999, 9, "99", f, fpath))
 
-    if os.path.exists(gib_dir):
-        for f in os.listdir(gib_dir):
-            if f.endswith('.pdf'):
-                raw_files.append((9999, 9, "99", f, os.path.join(gib_dir, f)))
+    # Tüm olası lokasyonları tara (Github yükleme hatalarına tolerans)
+    scan_directory_for_pdfs(tesmer_dir)
+    scan_directory_for_pdfs(gib_dir)
+    scan_directory_for_pdfs(base_dir) # PDF'ler kazara ana klasöre atıldıysa buradan yakalar
 
     # Yıla, sonra döneme, sonra ders koduna göre eskiden yeniye kusursuz sıralama
     raw_files.sort(key=lambda x: (x[0], x[1], x[2]))
