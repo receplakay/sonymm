@@ -123,8 +123,23 @@ with st.sidebar:
 
     st.divider()
     st.title("📚 Knowledge")
+    DERS_KODLARI = {
+        "01": "İleri Düzey Finansal Muhasebe",
+        "02": "Finansal Yönetim",
+        "03": "Yönetim Muhasebesi",
+        "04": "Denetim, Tasdik ve Meslek Hukuku",
+        "05": "Revizyon",
+        "06": "Vergi Tekniği",
+        "07": "Gelir Üzerinden Alınan Vergiler",
+        "08": "Harcama ve Servet Üz. Alınan Vergiler",
+        "09": "Dış Ticaret ve Kambiyo Mevzuatı",
+        "10": "Sermaye Piyasası Mevzuatı"
+    }
+
     base_dir = os.path.dirname(os.path.abspath(__file__))
     tesmer_dir = os.path.join(base_dir, "TESMER_Sorular")
+    gib_dir = os.path.join(base_dir, "GIB_Ozelgeler")
+    
     raw_files = []
     processed = set()
     def scan(p):
@@ -133,12 +148,29 @@ with st.sidebar:
                 if f.endswith(".pdf") and f not in processed:
                     processed.add(f)
                     match = re.search(r'ymm_(\d{4})_(\d)_(\d{2})', f)
-                    if match: raw_files.append((int(match.group(1)), int(match.group(2)), match.group(3), f, os.path.join(p, f)))
-                    else: raw_files.append((9999, 9, "99", f, os.path.join(p, f)))
-    scan(tesmer_dir); scan(base_dir)
-    raw_files.sort(key=lambda x: (x[0], x[1], x[2]))
+                    if match:
+                        yil = int(match.group(1))
+                        donem = int(match.group(2))
+                        ders = match.group(3)
+                        raw_files.append((yil, donem, ders, f, os.path.join(p, f)))
+                    else:
+                        raw_files.append((9999, 9, "99", f, os.path.join(p, f)))
+
+    scan(tesmer_dir)
+    scan(gib_dir)
+    scan(base_dir)
     
-    all_files = { (f"[{y}/{d}] {f}" if y!=9999 else f): p for y,d,ders,f,p in raw_files }
+    raw_files.sort(key=lambda x: (x[0], x[1], x[2]))
+
+    all_files = {}
+    for yil, donem, ders, f, fpath in raw_files:
+        if yil != 9999:
+            ders_adi = DERS_KODLARI.get(ders, f"Ders Kod {ders}")
+            label = f"[{yil} / {donem}. Dönem] {ders_adi}"
+            all_files[label] = fpath
+        else:
+            all_files[f] = fpath
+    
     selected_files = st.multiselect("Dökümanlar:", options=list(all_files.keys()))
 
     if st.button("🗑️ Sohbeti Temizle"):
