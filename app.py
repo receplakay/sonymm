@@ -250,6 +250,13 @@ if prompt:
                     with st.spinner(f"{fname} okunuyor..."):
                         context_txt += f"\n--- KAYNAK: {fname} ---\n{extract_pdf_text(all_files[fname])}\n"
                 
+                try:
+                    available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                    if f"models/{target_model_id}" not in available:
+                        target_model_id = available[0].replace("models/", "") if available else "gemini-pro"
+                except:
+                    pass
+
                 model = genai.GenerativeModel(target_model_id)
                 system_prompt = f"Sen YMM'sin. Kanun metni için: [FOOTNOTE: Madde Adı | Tam Metin] formatını kullan. Sorularda [1],[2] atıf yap.\nKaynaklar:\n{context_txt}"
                 
