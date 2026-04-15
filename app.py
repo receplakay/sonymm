@@ -253,7 +253,7 @@ if st.session_state.footnotes:
 st.write(""); st.divider()
 ec1, ec2, ec3 = st.columns([2, 2, 4])
 with ec1:
-    if st.button("🖨️ Sayfayı PDF Olarak Kaydet"): components.html("<script>window.print();</script>", height=0)
+    if st.button("🖨️ Sayfayı PDF Olarak Kaydet"): components.html("<script>parent.window.print();</script>", height=0)
 with ec2:
     txt_out = ""
     for m in st.session_state.messages: txt_out += f"{m['role'].upper()}: {m['content']}\n\n"
