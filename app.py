@@ -75,6 +75,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- HELPER FUNCTIONS ---
+@st.cache_data(show_spinner=False)
+def extract_pdf_text(filepath):
+    text = ""
+    try:
+        with open(filepath, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            for page in reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted + "\n"
+    except Exception as e:
+        return f"[PDF Okuma Hatası: {str(e)}]"
+    return text
+
 def update_cost(model_id, in_tokens, out_tokens):
     # Model ID normalizasyonu
     clean_id = "gemini-1.5-flash" if "flash" in model_id.lower() else "gemini-1.5-pro"
